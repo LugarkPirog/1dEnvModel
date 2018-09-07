@@ -6,7 +6,9 @@ from ddpg.ddpg import ReplayBuffer
 
 class Env:
     def __init__(self):
-        self.actions = [0, 1, 2]
+        self.actions = np.array([[1,0,0],
+                                 [0,1,0],
+                                 [0,0,1]])
         self.state_range = (0., 150.)
         self.dx = 1.
         self.std_0 = .2
@@ -32,6 +34,12 @@ class Env:
             done = 0
         return self.state_from, dist, done
 
+    def get_state(self):
+        return self.state_from
+
+    def get_target(self):
+        return self.state_to
+
     def move_func(self, action):
         if action == 0:
             return np.random.randn()*self.std_0
@@ -44,7 +52,7 @@ class Env:
 
 
 class ModelNetwork:
-    def __init__(self, state_dim=2, action_dim=3, out_dim=1, layer_sizes=(256,256),
+    def __init__(self, state_dim=1, action_dim=3, out_dim=1, layer_sizes=(256,256),
                  activations=('relu','relu','id'), max_buffer_len=500000,
                  print_loss_every=1000, name='EnvModel'):
         self.name = name
@@ -85,7 +93,7 @@ class ModelNetwork:
 
             with tf.name_scope('layer_2'):
                 w_2 = tf.get_variable('w_2', [layers[0], layers[1]])
-                b_2 = tf.Variable(tf.zeros([layers[2], ]), name='b_2')
+                b_2 = tf.Variable(tf.zeros([layers[1], ]), name='b_2')
                 l2 = self._parse_activations(activations[1])(tf.matmul(l1, w_2) + b_2)
 
             with tf.name_scope('layer_3'):
@@ -160,8 +168,21 @@ class ModelNetwork:
         with open(path, 'wb') as f:
             self.buffer = pickle.load(f)
 
+    def add_observation(self, state, action, new_state):
+        self.buffer.add(state, action, new_state)
+
 
 if __name__ == '__main__':
     env = Env()
-
     agent = ModelNetwork()
+    state = env.get_state()
+
+    for i in range(3):
+        action = np.random.randint(0,3)
+        action_ohe = env.actions[action]
+
+        new_state, reward, done = env.step(action)
+        agent.add_observation([state], [action_ohe], [new_state])
+        state = new_state
+
+    print(agent.buffer.buffer)
