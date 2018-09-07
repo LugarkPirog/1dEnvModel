@@ -142,24 +142,25 @@ class ModelNetwork:
         return self.sess.run(self.output, {self.state_input:states,
                                            self.action_input:actions})
 
-    def train(self, iters, batch_size):
+    def train(self, iters, batch_size, lr=1e-3):
         if self.buffer.count == 0:
             raise ValueError('No data in buffer! Fulfill it somehow!')
         for i in range(iters):
-            data = np.array(self.buffer.sample(batch_size))
-            states = data[:,0]
-            actions = data[:,1]
-            next_states = data[:,2]
+            data = self.buffer.sample(batch_size)
+            states = np.array([d[0] for d in data])
+            actions = np.array([d[1] for d in data])
+            next_states = np.array([d[2] for d in data])
 
-            self._one_train_step(states, actions, next_states)
+            self._one_train_step(states, actions, next_states, lr)
 
             self.gs += 1
 
-    def _one_train_step(self, states, actions, target):
-        feed_dict = {self.state_input:states,
-                     self.action_input:actions,
-                     self.target_input:target}
-        _, loss = self.sess.run([self._update_step, self._loss, feed_dict])
+    def _one_train_step(self, states, actions, target, lr):
+        feed_dict = {self.state_input:states.reshape((-1,self.state_dim)),
+                     self.action_input:actions.reshape((-1,self.action_dim)),
+                     self.target_input:target.reshape((-1, self.state_dim)),
+                     self.lr:lr}
+        _, loss = self.sess.run([self._update_step, self._loss], feed_dict)
         self.losses.append(loss)
         if self.gs % self.print_loss_every == self.print_loss_every - 1:
             print('GS {:6g}, Loss: {:.5f}'.format(self.gs+1, np.mean(self.losses[-100:])))
@@ -177,7 +178,7 @@ if __name__ == '__main__':
     agent = ModelNetwork()
     state = env.get_state()
 
-    for i in range(3):
+    for i in range(10000):
         action = np.random.randint(0,3)
         action_ohe = env.actions[action]
 
@@ -185,4 +186,6 @@ if __name__ == '__main__':
         agent.add_observation([state], [action_ohe], [new_state])
         state = new_state
 
-    print(agent.buffer.buffer)
+    print('Buffer Ready!')
+
+    agent.train(10000, batch_size=32)
